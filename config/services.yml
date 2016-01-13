@@ -1,0 +1,24 @@
+parameters:
+    gn36.hjw_bridge.calendar_table: '%table_prefix%calendar'
+    gn36.hjw_bridge.calendar_event_table: '%table_prefix%calendar_event'
+    gn36.hjw_bridge.calendar_event_list_table: '%table_prefix%calendar_event_list'
+    gn36.hjw_bridge.calendar_participants_table: '%table_prefix%calendar_participants'
+services:
+    gn36.hjw_bridge.events.viewtopic:
+        class: gn36\hjw_bridge\event\listener
+        arguments:
+            - '@gn36.hookup.functions.hookup'
+            - '@template'
+            - '@dbal.conn'
+            - '@user'
+            - '@auth'
+            - '@request'
+            - '@dispatcher'
+            - '@notification_manager'
+            - '%core.root_path%'
+            - '%core.php_ext%'
+            - '%gn36.hookup.path%'
+            - '%gn36.hjw_bridge.calendar_table%'
+            - '%gn36.hjw_bridge.calendar_event_table%'
+        tags:
+            - { name: 'event.listener' }

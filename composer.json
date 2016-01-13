@@ -1,0 +1,36 @@
+{
+	"name": "gn36/hjw_bridge",
+	"type": "phpbb-extension",
+	"description": "This Extension creates a bridge between the Hookup Extension and HJWs Calendar. You can then find appointments using hookup and after a date is found enter them into the calendar. Both extensions need to be installed, otherwise you won't be able to install or use this one.",
+	"homepage": "https://github.com/gn36/phpbb-ext-hjw-bridge/",
+	"version": "1.0.0-dev",
+	"time": "2015-01-03",
+	"license": "GPL-2.0",
+	"authors": [
+		{
+			"name": "Martin Beckmann",
+			"email": "gn#36@phpbb.de",
+			"homepage": "https://www.phpbb.de/",
+			"role": "Lead Developer"
+		}
+	],
+	"require": {
+		"php": ">=5.3.3"
+	},
+	"require-dev": {
+		"phpbb/epv": "dev-master"
+	},
+	"extra": {
+		"display-name": "Calendar/Hookup bridge",
+		"soft-require": {
+			"phpbb/phpbb": ">=3.1.2,<3.2.*@dev",
+			"gn36/hookup": ">=1.0.0-dev",
+			"hjw/calendar": ">=0.7.2"
+		},
+		"version-check": {
+			"host": "phpbb.gn36.de",
+			"directory": "/extensions/vinfo",
+			"filename": "phpbb-ext-hjw-hookup-bridge.json"
+		}
+	}
+}
