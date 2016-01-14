@@ -1,8 +1,8 @@
 parameters:
-    gn36.hjw_bridge.calendar_table: '%table_prefix%calendar'
-    gn36.hjw_bridge.calendar_event_table: '%table_prefix%calendar_event'
-    gn36.hjw_bridge.calendar_event_list_table: '%table_prefix%calendar_event_list'
-    gn36.hjw_bridge.calendar_participants_table: '%table_prefix%calendar_participants'
+    gn36.hjw_bridge.calendar_table: '%core.table_prefix%calendar'
+    gn36.hjw_bridge.calendar_event_table: '%core.table_prefix%calendar_event'
+    gn36.hjw_bridge.calendar_event_list_table: '%core.table_prefix%calendar_event_list'
+    gn36.hjw_bridge.calendar_participants_table: '%core.table_prefix%calendar_participants'
 services:
     gn36.hjw_bridge.events.viewtopic:
         class: gn36\hjw_bridge\event\listener
@@ -20,5 +20,6 @@ services:
             - '%gn36.hookup.path%'
             - '%gn36.hjw_bridge.calendar_table%'
             - '%gn36.hjw_bridge.calendar_event_table%'
+            - '%gn36.hjw_bridge.calendar_participants_table%'
         tags:
             - { name: 'event.listener' }
