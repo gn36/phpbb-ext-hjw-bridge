@@ -26,6 +26,8 @@ class listener implements EventSubscriberInterface
 	{
 		return array(
 			'gn36.hookup.set_activedate_confirmed'	=> 'activedate_set',
+			'gn36.hookup.viewtopic.process_status'	=> 'sync_participant_hookup',
+			'hjw.calendar.viewtopic.modify_participants_list' => 'sync_participant_calendar',
 		);
 	}
 
@@ -71,6 +73,12 @@ class listener implements EventSubscriberInterface
 	/** @var string */
 	protected $cal_participants_table;
 
+	/** @var array */
+	protected $part_ary = array(hookup::HOOKUP_YES => 'yes', hookup::HOOKUP_NO => 'no', hookup::HOOKUP_MAYBE => 'mb');
+
+	/** @var array */
+	protected $part_ary_inv = array('yes' => hookup::HOOKUP_YES, 'no' => hookup::HOOKUP_NO, 'mb' => hookup::HOOKUP_MAYBE);
+
 	/**
 	 * Constructor
 	 *
@@ -104,7 +112,7 @@ class listener implements EventSubscriberInterface
 		$this->cal_participants_table = $cal_participants_table;
 	}
 
-	public function activedate_set($event)
+	public function activedate_set(\Symfony\Component\EventDispatcher\Event $event)
 	{
 		$topic_data = $event['topic_data'];
 		$first_post = intval($topic_data['topic_first_post_id']);
@@ -176,7 +184,7 @@ class listener implements EventSubscriberInterface
 			$this->db->sql_query($sql);
 
 			// Participants
-			$part_ary = array(hookup::HOOKUP_YES => 'yes', hookup::HOOKUP_NO => 'no', hookup::HOOKUP_MAYBE => 'mb');
+			$part_ary = $this->part_ary;
 
 			// Already entered?
 			$entered_users = array();
@@ -192,7 +200,7 @@ class listener implements EventSubscriberInterface
 			foreach ($this->hookup->hookup_users as $user_id => $userdata)
 			{
 				// Did the user enter anything for this date?
-				if ($this->hookup->hookup_availables[$user_id][$event['set_active']] == hookup::HOOKUP_UNSET)
+				if (!isset($this->hookup->hookup_availables[$user_id][$event['set_active']]) || $this->hookup->hookup_availables[$user_id][$event['set_active']] == hookup::HOOKUP_UNSET)
 				{
 					continue;
 				}
@@ -220,5 +228,121 @@ class listener implements EventSubscriberInterface
 
 			$this->db->sql_multi_insert($this->cal_participants_table, $sql_ary);
 		}
+	}
+
+	/**
+	 * Synchronizes new participant entries from hookup to calendar
+	 *
+	 * @param \Symfony\Component\EventDispatcher\Event $event
+	 * @throws \Exception
+	 */
+	public function sync_participant_hookup(\Symfony\Component\EventDispatcher\Event $event)
+	{
+		$topic_data = $event['topic_data'];
+
+		if (!$event['active_date'])
+		{
+			die('ACT');
+			return;
+		}
+
+		$availables = $event['availables'];
+
+		if (!isset($availables[$event['active_date']]) || !in_array($availables[$event['active_date']], $this->part_ary_inv))
+		{
+			die('missing');
+			return;
+		}
+
+		// Check if we have a calendar entry for the first post:
+		$sql = 'SELECT post_id FROM ' . $this->cal_table . ' WHERE post_id = ' . (int) $topic_data['topic_first_post_id'];
+		$result = $this->db->sql_query($sql);
+		$cal_exists = $this->db->sql_fetchfield('post_id');
+		$this->db->sql_freeresult($result);
+
+		if (!$cal_exists)
+		{
+			echo "post: " . $event['topic_first_post_id'];
+			die('CAL');
+			return;
+		}
+		$user_id = $this->user->data['user_id'];
+
+		$sql_ary = array(
+			'POST_ID'		=> (int) $topic_data['topic_first_post_id'],
+			'USER_ID'		=> $user_id,
+			'NUMBER'		=> 1,
+			'PARTICIPANTS'	=> $this->part_ary[$availables[$event['active_date']]],
+			'COMMENTS'		=> utf8_normalize_nfc($event['comment']),
+			'DATE'			=> date("Y-n-j-H-i"),
+		);
+
+		// Check, whether user is already entered:
+		$sql='SELECT * from ' . $this->cal_participants_table . "
+					WHERE post_id = '" . $sql_ary['POST_ID'] ."' and user_id = '" . $user_id."'";
+		$result = $this->db->sql_query($sql);
+		$row = $this->db->sql_fetchrow($result);
+		$this->db->sql_freeresult($result);
+
+		// Enter data:
+		if ($row)
+		{
+			$sql = 'UPDATE ' . $this->cal_participants_table . '
+				SET ' . $this->db->sql_build_array('UPDATE', $sql_ary) . "
+				WHERE post_id = '" . $sql_ary['POST_ID'] ."' and user_id = '" . $user_id."'";
+		}
+		else
+		{
+			$sql = 'INSERT INTO ' . $this->cal_participants_table . ' ' . $this->db->sql_build_array('INSERT', $sql_ary);
+		}
+		$result = $this->db->sql_query($sql);
+	}
+
+
+	/**
+	 * Synchronizes new participant entries from calendar to hookup
+	 *
+	 * @param \Symfony\Component\EventDispatcher\Event $event
+	 * @throws \Exception
+	 */
+	public function sync_participant_calendar(\Symfony\Component\EventDispatcher\Event $event)
+	{
+		$sql_data = $event['sql_ary'];
+		$post_id = (int) $sql_data['POST_ID'];
+
+		// Retrieve Hookup for that post:
+		$sql = 'SELECT p.topic_id, t.forum_id, t.topic_first_post_id FROM ' . POSTS_TABLE . ' p LEFT JOIN ' . TOPICS_TABLE . ' t ON p.topic_id = t.topic_id WHERE post_id = ' . $post_id;
+		$result = $this->db->sql_query($sql);
+		$row = $this->db->sql_fetchrow($result);
+		$this->db->sql_freeresult($result);
+
+		if (!$row || !$this->hookup->load_hookup($row['topic_id']))
+		{
+			throw new \Exception('Loading topic or hookup failed. Post ID: ' . $post_id);
+		}
+
+		if (!$this->hookup->hookup_enabled || $post_id != $row['topic_first_post_id'])
+		{
+			// Don't sync if the hookup is disabled or the event is not linked to the first post of the topic
+			return;
+		}
+
+		// Do not enter, if the user is not permitted to use the hookup
+		// Ignore permissions, if called for user_id different from current user
+		if ($event['user_id'] == $this->user->data['user_id'] && !$this->auth->acl_get('f_hookup', $row['forum_id']))
+		{
+			return;
+		}
+
+		// Don't sync if no activedate is set
+		if (!$this->hookup->hookup_active_date)
+		{
+			return;
+		}
+
+		$this->hookup->add_user($sql_data['USER_ID'], $sql_data['COMMENTS']);
+		$this->hookup->set_user_date($sql_data['USER_ID'], $this->hookup->hookup_active_date, $this->part_ary_inv[$sql_data['PARTICIPANTS']]);
+		$this->hookup->submit(false);
+
 	}
 }
